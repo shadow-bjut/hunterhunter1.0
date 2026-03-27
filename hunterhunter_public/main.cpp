@@ -1,7 +1,17 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include<graphics.h>
 #include<conio.h>
 #include<Windows.h>
 #include<stdio.h>
+#include<math.h>
+#define RANK_FILE "scores.dat"
+#define RANK_SIZE 5
+struct RankEntry {
+	char name[22];   // 最多21字符 + '\0'
+	int  score;
+};
+RankEntry rankList[RANK_SIZE];
+
 bool roles = 0, isstart = 0;//默认角色为奇犽
 int difficulties = -1;//默认难度为简单
 char* rank[5];
@@ -15,6 +25,132 @@ int   gameFrames = 0;    // 游戏运行帧数（每帧+1）
 int   finalScore = 0;    // 最终得分（结算时计算）
 bool  gameWin = false;
 bool  gameLose = false;
+
+
+void loadRank()
+{
+	memset(rankList, 0, sizeof(rankList));
+	FILE* f = fopen(RANK_FILE, "rb");
+	if (!f) return;
+	fread(rankList, sizeof(RankEntry), RANK_SIZE, f);
+	fclose(f);
+}
+
+void saveRank(int newScore,const char * name)
+{
+	loadRank();
+	// 找最低分位置替换
+	int minIdx = - 1;
+	for (int i = 0; i < RANK_SIZE; i++) {
+		if (newScore > rankList[i].score) { minIdx = i; break; }
+	}
+	if (minIdx == -1) return;
+	// 后移腾位
+	for (int i = RANK_SIZE - 1; i > minIdx; i--)
+		rankList[i] = rankList[i - 1];
+	// 插入新记录
+	strncpy(rankList[minIdx].name, name, 21);
+	rankList[minIdx].name[21] = '\0';
+	rankList[minIdx].score = newScore;
+
+	FILE* f = fopen(RANK_FILE, "wb");
+	if (!f) return;
+	fwrite(rankList, sizeof(RankEntry), RANK_SIZE, f);
+	fclose(f);
+}
+
+void inputNickname(char* outName)
+{
+	memset(outName, 0, 22);
+	int len = 0;
+	bool confirmed = false;
+
+	ExMessage dummy;
+	while (peekmessage(&dummy, EX_KEY)); // 清空残留消息
+
+	while (!confirmed)
+	{
+		BeginBatchDraw();
+
+		setfillcolor(RGB(30, 30, 60));
+		solidrectangle(340, 420, 940, 560);
+		setcolor(RGB(100, 180, 255));
+		rectangle(340, 420, 940, 560);
+
+		settextstyle(24, 0, _T("黑体"));
+		settextcolor(RGB(200, 220, 255));
+		setbkmode(TRANSPARENT);
+		outtextxy(360, 435, _T("Enter a nickname (A-Z 0-9 _, max 21):"));
+		outtextxy(360, 530, _T("Enter = confirm    ESC = Anonymous"));
+
+		setfillcolor(RGB(20, 20, 40));
+		solidrectangle(360, 470, 920, 510);
+		setcolor(RGB(100, 180, 255));
+		rectangle(360, 470, 920, 510);
+
+		// 光标闪烁：用系统时间控制，不依赖 gameFrames
+		TCHAR display[48] = { 0 };
+		for (int i = 0; i < len; i++) display[i] = (TCHAR)outName[i];
+		display[len] = (GetTickCount() / 400) % 2 == 0 ? '_' : ' ';
+		settextstyle(22, 0, _T("Courier New"));
+		settextcolor(WHITE);
+		outtextxy(368, 480, display);
+
+		TCHAR countBuf[16];
+		_stprintf_s(countBuf, _T("%d/21"), len);
+		settextstyle(18, 0, _T("黑体"));
+		settextcolor(len == 21 ? RGB(255, 80, 80) : RGB(150, 150, 150));
+		outtextxy(860, 535, countBuf);
+
+		EndBatchDraw();
+
+		// ---- 改用 WM_KEYDOWN + GetKeyState 判断字符 ----
+		ExMessage msg;
+		if (peekmessage(&msg, EX_KEY) && msg.message == WM_KEYDOWN)
+		{
+			UINT vk = msg.vkcode;
+
+			if (vk == VK_RETURN)                          // Enter
+			{
+				if (len == 0) strncpy(outName, "Anonymous", 21);
+				confirmed = true;
+			}
+			else if (vk == VK_ESCAPE)                     // ESC
+			{
+				strncpy(outName, "Anonymous", 21);
+				confirmed = true;
+			}
+			else if (vk == VK_BACK && len > 0)            // Backspace
+			{
+				outName[--len] = '\0';
+			}
+			else if (len < 21)
+			{
+				bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+				bool caps = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
+				char ch = 0;
+
+				if (vk >= 'A' && vk <= 'Z') {
+					// Shift 或 CapsLock 决定大小写
+					ch = (shift ^ caps) ? (char)vk : (char)(vk + 32);
+				}
+				else if (vk >= '0' && vk <= '9') {
+					ch = shift ? 0 : (char)vk; // Shift+数字是符号，忽略
+				}
+				else if (vk == VK_OEM_MINUS && shift) {   // Shift+- = _
+					ch = '_';
+				}
+
+				if (ch != 0) {
+					outName[len++] = ch;
+					outName[len] = '\0';
+				}
+			}
+		}
+
+		Sleep(10);
+	}
+}
 
 //有关initmenu的所有函数：
 void tool() { //获取位置工具
@@ -66,17 +202,25 @@ void sps()//show pending selection
 	fillcircle(490 + 173 * 2, 255, 5);
 }
 
-void sr() //showrank
+void sr() // showrank
 {
-	setbkmode(TRANSPARENT);
-	settextcolor(RGB(225, 215, 0));
-	for (int i = 0; i < 5; i++)
-	{
-		rank[i] = (char*)malloc(sizeof(char) * 21);
-		rank[i][0] = 's';
-		rank[i][1] = '\0';
-		outtextxy(1005, 310 + 64 * i, rank[i]);
-	}
+	loadRank();
+    setbkmode(TRANSPARENT);
+    for (int i = 0; i < RANK_SIZE; i++) {
+        TCHAR buf[48];
+        if (rankList[i].score > 0) {
+            // 昵称转宽字符显示
+            TCHAR wname[22] = {0};
+            for (int j = 0; j < 21 && rankList[i].name[j]; j++)
+                wname[j] = (TCHAR)(unsigned char)rankList[i].name[j];
+            _stprintf_s(buf, _T("%-10s %d"), wname, rankList[i].score);
+        } else {
+            _stprintf_s(buf, _T("---"));
+        }
+        settextcolor(i == 0 ? RGB(255,215,0) : BLACK);
+        settextstyle(25, 0, _T("Courier New"));   // 等宽字体让对齐更好看
+        outtextxy(1000, 313 + 64 * i, buf);
+    }
 }
 
 void initmenu()
@@ -95,11 +239,13 @@ void initmenu()
 	sr();
 	while (!GetAsyncKeyState(27))
 	{
+		BeginBatchDraw();
 		srad();
 		sps();
 		ss();
-		Sleep(100);
-		if (isstart) break;
+		Sleep(10);
+		EndBatchDraw();
+		if(isstart) break;
 	}
 	closegraph();
 }
@@ -125,6 +271,64 @@ SkillData xjSkills[3] = {
 	{25, 30, 200},   // 技能3
 };
 
+//特效
+
+struct Effect {
+	int x, y;
+	int timer;      // 剩余显示帧数
+	int type;       // 0=普攻 1=技能1 2=技能2 3=技能3
+	bool active;
+};
+const int MAX_EFFECT = 8;
+Effect effects[MAX_EFFECT];
+
+void spawnEffect(int x, int y, int type)
+{
+	for (int i = 0; i < MAX_EFFECT; i++) {
+		if (!effects[i].active) {
+			effects[i] = { x, y, 18, type, true };
+			return;
+		}
+	}
+}
+
+void drawEffects()
+{
+	for (int i = 0; i < MAX_EFFECT; i++) {
+		if (!effects[i].active) continue;
+		int alpha = effects[i].timer * 14;   // 越来越淡
+		int r = effects[i].timer * 3;        // 扩散半径
+		switch (effects[i].type) {
+		case 0: // 普攻：白色扩散圆
+			setcolor(RGB(255, 255, 200));
+			circle(effects[i].x, effects[i].y, r);
+			break;
+		case 1: // 技能1：青色圆环
+			setcolor(RGB(0, 220, 255));
+			circle(effects[i].x, effects[i].y, r * 2);
+			circle(effects[i].x, effects[i].y, r);
+			break;
+		case 2: // 技能2：金色大爆炸
+			setfillcolor(RGB(255, 200, 0));
+			solidcircle(effects[i].x, effects[i].y, r * 2);
+			setfillcolor(RGB(255, 255, 255));
+			solidcircle(effects[i].x, effects[i].y, r);
+			break;
+		case 3: // 技能3：紫色闪光
+			setcolor(RGB(180, 0, 255));
+			for (int j = 0; j < 6; j++) {
+				float ang = j * 3.14159f / 3.0f;
+				line(effects[i].x, effects[i].y,
+					effects[i].x + (int)(cosf(ang) * r * 2),
+					effects[i].y + (int)(sinf(ang) * r * 2));
+			}
+			break;
+		}
+		effects[i].timer--;
+		if (effects[i].timer <= 0) effects[i].active = false;
+	}
+}
+
 struct hero {
 	int locx;
 	int locy;
@@ -141,13 +345,19 @@ struct hero {
 	int  castTimer;      // 前摇计时（>0说明在前摇中，不能移动）
 	int  currentSkill;   // 当前正在释放的技能编号（-1=无）
 	bool isAttacking;    // 是否在普通攻击动作中
+	int hitFlashTimer;   // 受击闪烁计时（>0时显示红色）
 }qy, xj;
 
+struct herostates {
+	IMAGE stand[2];   // [0]=左 [1]=右
+	IMAGE jump[2];
+	IMAGE crouch[2];
+}qysta,xjsta;
 
 
 struct Bullet {
 	float x, y;
-	float vx;
+	float vx, vy;
 	bool active;
 };
 const int MAX_BULLET = 10;//最大十个子弹
@@ -161,7 +371,7 @@ struct Boss {
 	int attacktimer;//攻击计时器
 	int attackInterval; //血量关联的攻击间隔
 	int damage; //伤害
-
+	int bulletPattern;   // 0=直线 1=散射 2=追踪
 	Bullet bullets[MAX_BULLET];//子弹库；
 }boss;
 
@@ -229,10 +439,12 @@ void handleAttack(hero* h)
 
 		// 普通攻击前摇极短，直接在这里结算也可以
 		int dist = boss.locx - h->locx;
+		spawnEffect(h->locx + 80, h->locy + 40, 0);
 		if (dist > 0 && dist < 150) {  // 普通攻击范围更短
 			boss.lefthp -= 8;
 			if (boss.lefthp < 0) boss.lefthp = 0;
 			if (boss.lefthp == 0) boss.survive = false;
+			
 		}
 		h->currentSkill = -1;
 		return;
@@ -246,6 +458,7 @@ void handleAttack(hero* h)
 			h->castTimer = sd[i].castFrames;
 			h->skillTimer[i] = sd[i].cooldown;
 			h->currentSkill = i;
+			spawnEffect(h->locx + 80, h->locy + 40, h->currentSkill + 1);
 			break; // 同一帧只释放一个技能
 		}
 	}
@@ -277,6 +490,8 @@ void inithero()
 	xj.currentSkill = -1;
 	xj.isAttacking = false;
 	for (int i = 0; i < 3; i++) xj.skillTimer[i] = 0;
+	qy.hitFlashTimer = 0;
+	xj.hitFlashTimer = 0;
 }
 
 void initboss()
@@ -331,31 +546,68 @@ void bossAI(hero* h)
 
 	// ---- 攻击计时 ----
 	boss.attacktimer--;
+
+	// ---- 根据阶段切换弹幕模式 ----
+	boss.bulletPattern = boss.phase;   // 阶段0→直线，1→散射，2→追踪
+
 	if (boss.attacktimer <= 0) {
 		boss.attacktimer = boss.attackInterval;
 
-		// 找一个空闲弹幕槽发射
-		for (int i = 0; i < MAX_BULLET; i++) {
-			if (!boss.bullets[i].active) {
-				boss.bullets[i].x = (float)boss.locx;
-				boss.bullets[i].y = (float)(boss.locy + 40); // 弹幕从Boss腰部射出
-				// 阶段越高弹速越快
-				boss.bullets[i].vx = -8.0f - boss.phase * 2.0f;
-				boss.bullets[i].active = true;
-				break;
+		if (boss.bulletPattern == 0) {
+			// 模式0：单发直线
+			for (int i = 0; i < MAX_BULLET; i++) {
+				if (!boss.bullets[i].active) {
+					boss.bullets[i].x = (float)boss.locx;
+					boss.bullets[i].y = (float)(boss.locy + 40);
+					boss.bullets[i].vx = -8.0f;
+					boss.bullets[i].vy = 0.0f;   // 新增vy字段，见下方
+					boss.bullets[i].active = true;
+					break;
+				}
+			}
+		}
+		else if (boss.bulletPattern == 1) {
+			// 模式1：三连散射（上/中/下）
+			float angles[3] = { -0.3f, 0.0f, 0.3f };
+			int shot = 0;
+			for (int i = 0; i < MAX_BULLET && shot < 3; i++) {
+				if (!boss.bullets[i].active) {
+					boss.bullets[i].x = (float)boss.locx;
+					boss.bullets[i].y = (float)(boss.locy + 40);
+					boss.bullets[i].vx = -8.0f;
+					boss.bullets[i].vy = angles[shot] * 8.0f;
+					boss.bullets[i].active = true;
+					shot++;
+				}
+			}
+		}
+		else {
+			// 模式2：追踪弹（发射时指向玩家）
+			float dx = (float)(h->locx - boss.locx);
+			float dy = (float)(h->locy - boss.locy);
+			float len = sqrtf(dx * dx + dy * dy);
+			if (len < 1.0f) len = 1.0f;
+			for (int i = 0; i < MAX_BULLET; i++) {
+				if (!boss.bullets[i].active) {
+					boss.bullets[i].x = (float)boss.locx;
+					boss.bullets[i].y = (float)(boss.locy + 40);
+					boss.bullets[i].vx = dx / len * 10.0f;
+					boss.bullets[i].vy = dy / len * 10.0f;
+					boss.bullets[i].active = true;
+					break;
+				}
 			}
 		}
 	}
 
-	// ---- 移动所有活跃弹幕 ----
+	// ---- 移动弹幕（加入vy）----
 	for (int i = 0; i < MAX_BULLET; i++) {
 		if (!boss.bullets[i].active) continue;
 		boss.bullets[i].x += boss.bullets[i].vx;
-
-		// 飞出左边界则回收
-		if (boss.bullets[i].x < -50) {
+		boss.bullets[i].y += boss.bullets[i].vy;   // 新增Y轴移动
+		if (boss.bullets[i].x < -50 || boss.bullets[i].y < -50
+			|| boss.bullets[i].y > 800) {
 			boss.bullets[i].active = false;
-			continue;
 		}
 
 		// ---- 碰撞检测：弹幕打中玩家 ----
@@ -366,7 +618,10 @@ void bossAI(hero* h)
 		int by = (int)boss.bullets[i].y;
 
 		if (bx > hx && bx < hx + hw && by > hy && by < hy + hh) {
-			h->lefthp -= boss.damage;
+			int actualdamage = boss.damage;
+			if (h->iscrouching) actualdamage = boss.damage / 2;
+			h->lefthp -= actualdamage;
+			h->hitFlashTimer = 12;
 			if (h->lefthp < 0) h->lefthp = 0;
 			boss.bullets[i].active = false;           // 击中后弹幕消失
 			if (h->lefthp == 0) h->survive = false;
@@ -544,6 +799,7 @@ void move(hero* h)
 	bool keyA = (GetAsyncKeyState('A') & 0x8000) != 0;
 	bool keyS = (GetAsyncKeyState('S') & 0x8000) != 0;
 	bool keyD = (GetAsyncKeyState('D') & 0x8000) != 0;
+	bool keyF = (GetAsyncKeyState('F') & 0x8000) != 0;
 
 	// 根据按键更新坐标
 	if (keyA) {
@@ -552,6 +808,10 @@ void move(hero* h)
 	}
 	if (keyD) {
 		h->locx += 5; lastad = 1;
+		if (h->locx > RIGHT_BOUND) h->locx = RIGHT_BOUND;
+	}
+	if (keyF) {
+		h->locx += 10; lastad = 1;
 		if (h->locx > RIGHT_BOUND) h->locx = RIGHT_BOUND;
 	}
 	//二段跳
@@ -587,38 +847,13 @@ void applyPhysics(hero* h)//重力系统
 	}
 }
 
-void checkstate(bool jump, bool down, IMAGE* im, IMAGE* a, IMAGE* b, IMAGE* c, IMAGE* d, IMAGE* e, IMAGE* f, IMAGE* g, IMAGE* h, IMAGE* i, IMAGE* j, IMAGE* k, IMAGE* l)
+IMAGE* getHeroFrame(hero* h)
 {
-	if (!roles)
-	{
-		if (lastad)
-		{
-			if (!jump) *im = *b;
-			else *im = *d;
-			if (down) *im = *f;
-		}
-		if (!lastad)
-		{
-			if (!jump) *im = *a;
-			else *im = *c;
-			if (down) *im = *e;
-		}
-	}
-	else
-	{
-		if (lastad)
-		{
-			if (!jump) *im = *h;
-			else *im = *j;
-			if (down) *im = *l;
-		}
-		if (!lastad)
-		{
-			if (!jump) *im = *g;
-			else *im = *i;
-			if (down) *im = *k;
-		}
-	}
+	herostates * sta = roles ? &xjsta : &qysta;
+	int dir = lastad ? 1 : 0;
+	if (h->iscrouching) return &sta->crouch[dir];
+	if (!h->onground)   return &sta->jump[dir];
+	return &sta->stand[dir];
 }
 
 
@@ -630,20 +865,19 @@ void itg() //inside the game
 		IMAGE background;                                          //直立：a 跳跃：b 蹲下：c
 		IMAGE bossImg;														   //左：a 右 b
 		loadimage(&bossImg, _T("xj_left_resized.jpg"));
-		IMAGE aaa, aab, aba, abb, aca, acb, baa, bab, bba, bbb, bca, bcb;
+		loadimage(&qysta.stand[0], _T("qy_left_resized.jpg"));
+		loadimage(&qysta.stand[1], _T("qy_right_resized.jpg"));
+		loadimage(&qysta.jump[0], _T("qy_jump_left_resized.jpg"));
+		loadimage(&qysta.jump[1], _T("qy_jump_right_resized.jpg"));
+		loadimage(&qysta.crouch[0], _T("qy_xd_left_resized.jpg"));
+		loadimage(&qysta.crouch[1], _T("qy_xd_right_resized.jpg"));
+		loadimage(&xjsta.stand[0], _T("xj_left_resized.jpg"));
+		loadimage(&xjsta.stand[1], _T("xj_right_resized.jpg"));
+		loadimage(&xjsta.jump[0], _T("xj_jump_left_resized.jpg"));
+		loadimage(&xjsta.jump[1], _T("xj_jump_right_resized.jpg"));
+		loadimage(&xjsta.crouch[0], _T("xj_xd_left_resized.jpg"));
+		loadimage(&xjsta.crouch[1], _T("xj_xd_right_resized.jpg"));
 		loadimage(&background, _T("game_background.jpg"));
-		loadimage(&aaa, _T("qy_left_resized.jpg"));
-		loadimage(&aab, _T("qy_right_resized.jpg"));
-		loadimage(&aba, _T("qy_jump_left_resized.jpg"));
-		loadimage(&abb, _T("qy_jump_right_resized.jpg"));
-		loadimage(&aca, _T("qy_xd_left_resized.jpg"));
-		loadimage(&acb, _T("qy_xd_right_resized.jpg"));
-		loadimage(&baa, _T("xj_left_resized.jpg"));
-		loadimage(&bab, _T("xj_right_resized.jpg"));
-		loadimage(&bba, _T("xj_jump_left_resized.jpg"));
-		loadimage(&bbb, _T("xj_jump_right_resized.jpg"));
-		loadimage(&bca, _T("xj_xd_left_resized.jpg"));
-		loadimage(&bcb, _T("xj_xd_right_resized.jpg"));
 		initgame();
 		gameFrames = 0;
 		gameLose = false;
@@ -653,30 +887,65 @@ void itg() //inside the game
 			BeginBatchDraw();
 			cleardevice();
 			putimage(0, 0, &background);
+			if (qy.hitFlashTimer > 0) {
+				qy.hitFlashTimer--;
+				// 每2帧交替显示，产生闪烁感
+				if (qy.hitFlashTimer % 2 == 0) {
+					setfillcolor(RGB(255, 0, 0));
+					setfillstyle(BS_SOLID);
+					// 在角色位置画半透明红框（EasyX用透明色模拟）
+					rectangle(qy.locx + 10, qy.locy + 5, qy.locx + 70, qy.locy + 75);
+				}
+				// 显示浮动伤害数字
+				TCHAR dmgBuf[8];
+				int actualdamage = boss.damage;
+				if (qy.iscrouching) actualdamage /= 2;
+				_stprintf_s(dmgBuf, _T("-%d"), actualdamage);
+				settextstyle(22, 0, _T("黑体"));
+				settextcolor(RGB(255, 80, 80));
+				setbkmode(TRANSPARENT);
+				outtextxy(qy.locx + 20, qy.locy - 10 - (12 - qy.hitFlashTimer) * 2, dmgBuf);
+			}
 			//tool();
 			if (!gameWin && !gameLose) {
 				gameFrames++;//计算时间
 				move(&qy);
 				applyPhysics(&qy);
 				bossAI(&qy);//bossai里面有handleattack
-				IMAGE temp = aab;
-				IMAGE* t = &temp;
-				checkstate(!qy.onground, qy.iscrouching, t,
-					&aaa, &aab, &aba, &abb, &aca, &acb,
-					&baa, &bab, &bba, &bbb, &bca, &bcb);
+				IMAGE* t = getHeroFrame(&qy);
 				putimage(qy.locx, qy.locy, t);
 				drawBoss(&bossImg);
+				drawEffects();
 				drawHUD(&qy);
 				int result = checkGameOver(&qy);
 			}
 			// ---- 结算界面 ----
 			if (gameWin) {
-				drawBoss(&bossImg);    // 保留最后画面做背景
-				putimage(qy.locx, qy.locy, &aab);
+				drawBoss(&bossImg);
 				showWinScreen(&qy);
+				EndBatchDraw(); // 先结束当前帧再弹输入框
 
-				// R键：保存成绩并退出游戏循环（第五阶段接入存档）
-				if (GetAsyncKeyState('R') & 0x8000) break;
+				if (GetAsyncKeyState('R') & 0x8000) {
+					Sleep(200); // 防止R键残留
+					char nickname[22] = { 0 };
+					inputNickname(nickname);  // 独立运行，不嵌套在BatchDraw里
+					saveRank(finalScore, nickname);
+
+					// 存档成功提示
+					BeginBatchDraw();
+					setfillcolor(RGB(0, 100, 0));
+					solidrectangle(400, 340, 880, 390);
+					settextstyle(22, 0, _T("黑体"));
+					settextcolor(RGB(150, 255, 150));
+					setbkmode(TRANSPARENT);
+					TCHAR tip[48];
+					_stprintf_s(tip, _T("已保存：%hs  得分：%d"), nickname, finalScore);
+					outtextxy(415, 353, tip);
+					EndBatchDraw();
+					Sleep(1500); // 显示1.5秒后退出
+					break;
+				}
+				BeginBatchDraw(); // 没按R就继续下一帧
 			}
 
 			if (gameLose) {
