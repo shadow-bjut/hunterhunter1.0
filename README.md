@@ -1,4 +1,4 @@
-# 🎮 猎人对决 Hunter's Duel
+# 🎮 hunterhunter
 
 > 一款基于 EasyX 图形库的 C++ 横版动作 Boss 战游戏，以《Hunter × Hunter》为主题。
 
