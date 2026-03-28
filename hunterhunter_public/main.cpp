@@ -1,3 +1,4 @@
+#pragma comment(lib, "Msimg32.lib")
 #define _CRT_SECURE_NO_WARNINGS
 #include<graphics.h>
 #include<conio.h>
@@ -292,6 +293,28 @@ void spawnEffect(int x, int y, int type)
 	}
 }
 
+
+// PNG透明绘制：读取Alpha通道，alpha=0的像素跳过
+// 品红色(R=255,G=0,B=255)作为透明键，跳过不绘制
+// EasyX缓冲格式：0x00BBGGRR，所以品红存储值为 0x00FF00FF
+void putImageTransparent(int dstX, int dstY, IMAGE* img)
+{
+	HDC dstDC = GetImageHDC(NULL);      // 当前绘图缓冲（BeginBatchDraw期间有效）
+	HDC srcDC = GetImageHDC(img);       // 图片自己的HDC
+
+	TransparentBlt(
+		dstDC,                          // 目标DC
+		dstX, dstY,                     // 目标位置
+		img->getwidth(),                // 目标宽
+		img->getheight(),               // 目标高
+		srcDC,                          // 源DC
+		0, 0,                           // 源起点
+		img->getwidth(),                // 源宽
+		img->getheight(),               // 源高
+		RGB(255, 0, 255)                // 品红 = 透明色
+	);
+}
+
 void drawEffects()
 {
 	for (int i = 0; i < MAX_EFFECT; i++) {
@@ -379,12 +402,22 @@ struct Boss {
 // 基础分1000，每1hp加10分，每秒超过30秒扣5分
 int calcScore(hero* h)
 {
-	int timeSeconds = gameFrames / 60;        // 帧数÷60≈秒数（Sleep10ms≈100帧/秒，按实际调整）
+	int timeSeconds = gameFrames / 60;        // 帧数÷60≈秒数
 	int score = 1000;
 	score += h->lefthp * 10;                  // 血量奖励
 	int overTime = max(0, timeSeconds - 30);  // 超过30秒开始扣分
 	score -= overTime * 5;
 	if (score < 0) score = 0;
+	switch (difficulties) {         //难度系数
+	case -1:
+		break;
+	case 0:
+		score *= 1.2;
+		break;
+	case 1:
+		score *= 2;
+		break;
+	}
 	return score;
 }
 
@@ -635,7 +668,7 @@ void drawBoss(IMAGE* bossImg)
 	if (!boss.survive) return;
 
 	// 绘制 Boss 图片
-	putimage(boss.locx, boss.locy, bossImg);
+	putImageTransparent(boss.locx, boss.locy, bossImg);
 
 	// 绘制弹幕（暂用红色圆圈代替，后续可换图片）
 	for (int i = 0; i < MAX_BULLET; i++) {
@@ -864,19 +897,19 @@ void itg() //inside the game
 		initgraph(1280, 750);                                      //奇犽：a 小杰 ：b
 		IMAGE background;                                          //直立：a 跳跃：b 蹲下：c
 		IMAGE bossImg;														   //左：a 右 b
-		loadimage(&bossImg, _T("xj_left_resized.jpg"));
-		loadimage(&qysta.stand[0], _T("qy_left_resized.jpg"));
-		loadimage(&qysta.stand[1], _T("qy_right_resized.jpg"));
-		loadimage(&qysta.jump[0], _T("qy_jump_left_resized.jpg"));
-		loadimage(&qysta.jump[1], _T("qy_jump_right_resized.jpg"));
-		loadimage(&qysta.crouch[0], _T("qy_xd_left_resized.jpg"));
-		loadimage(&qysta.crouch[1], _T("qy_xd_right_resized.jpg"));
-		loadimage(&xjsta.stand[0], _T("xj_left_resized.jpg"));
-		loadimage(&xjsta.stand[1], _T("xj_right_resized.jpg"));
-		loadimage(&xjsta.jump[0], _T("xj_jump_left_resized.jpg"));
-		loadimage(&xjsta.jump[1], _T("xj_jump_right_resized.jpg"));
-		loadimage(&xjsta.crouch[0], _T("xj_xd_left_resized.jpg"));
-		loadimage(&xjsta.crouch[1], _T("xj_xd_right_resized.jpg"));
+		loadimage(&bossImg, _T("xj_left_resized.bmp"));
+		loadimage(&qysta.stand[0], _T("qy_left_resized.bmp"));
+		loadimage(&qysta.stand[1], _T("qy_right_resized.bmp"));
+		loadimage(&qysta.jump[0], _T("qy_jump_left_resized.bmp"));
+		loadimage(&qysta.jump[1], _T("qy_jump_right_resized.bmp"));
+		loadimage(&qysta.crouch[0], _T("qy_xd_left_resized.bmp"));
+		loadimage(&qysta.crouch[1], _T("qy_xd_right_resized.bmp"));
+		loadimage(&xjsta.stand[0], _T("xj_left_resized.bmp"));
+		loadimage(&xjsta.stand[1], _T("xj_right_resized.bmp"));
+		loadimage(&xjsta.jump[0], _T("xj_jump_left_resized.bmp"));
+		loadimage(&xjsta.jump[1], _T("xj_jump_right_resized.bmp"));
+		loadimage(&xjsta.crouch[0], _T("xj_xd_left_resized.bmp"));
+		loadimage(&xjsta.crouch[1], _T("xj_xd_right_resized.bmp"));
 		loadimage(&background, _T("game_background.jpg"));
 		initgame();
 		gameFrames = 0;
@@ -913,7 +946,8 @@ void itg() //inside the game
 				applyPhysics(&qy);
 				bossAI(&qy);//bossai里面有handleattack
 				IMAGE* t = getHeroFrame(&qy);
-				putimage(qy.locx, qy.locy, t);
+
+				putImageTransparent(qy.locx, qy.locy, t);
 				drawBoss(&bossImg);
 				drawEffects();
 				drawHUD(&qy);
@@ -961,7 +995,7 @@ void itg() //inside the game
 			Sleep(10);
 			EndBatchDraw();
 		}
-		printf("gaming over!");
+		printf("game over!");
 	}
 	return;
 }
