@@ -527,10 +527,10 @@ int calcScore(hero* h)
 	case -1:
 		break;
 	case 0:
-		score *= 1.2;
+		score *= 2;
 		break;
 	case 1:
-		score *= 2;
+		score *= 3;
 		break;
 	}
 	return score;
@@ -1296,10 +1296,10 @@ void itg() //inside the game
 				setbkmode(TRANSPARENT);
 				outtextxy(qy.locx + 20, qy.locy - 10 - (12 - qy.hitFlashTimer) * 2, dmgBuf);
 			}
+			hero* ah = roles ? &xj : &qy;   // ah = active hero
 			//tool();
 			if (!gameWin && !gameLose) {
 				gameFrames++;//计算时间
-				hero* ah = roles ? &xj : &qy;   // ah = active hero
 				move(ah);
 				applyPhysics(ah);
 				bossAI(ah);                      // bossAI 内调 handleAttack(h)，已修复
@@ -1321,7 +1321,7 @@ void itg() //inside the game
 			// ---- 结算界面 ----
 			if (gameWin) {
 				drawBoss(&bossImg);
-				showWinScreen(&qy);
+				showWinScreen(ah);
 				EndBatchDraw(); // 先结束当前帧再弹输入框
 
 				if (GetAsyncKeyState('R') & 0x8000) {
