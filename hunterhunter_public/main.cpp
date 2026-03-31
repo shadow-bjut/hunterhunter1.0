@@ -261,7 +261,7 @@ struct SkillData {
 
 SkillData qySkills[3] = {
 	{20, 25, 180},   // 技能1：前摇短、伤害中、冷却3秒
-	{40, 45, 300},   // 技能2：前摇长、伤害高、冷却5秒
+	{40, 3, 300},   // 技能2：
 	{10, 15, 120},   // 技能3：前摇很短、伤害低、冷却2秒
 };
 
@@ -278,16 +278,17 @@ struct Effect {
 	int x, y;
 	int timer;      // 剩余显示帧数
 	int type;       // 0=普攻 1=技能1 2=技能2 3=技能3
+	int herorole; //0 奇犽 1 小杰
 	bool active;
 };
 const int MAX_EFFECT = 8;
 Effect effects[MAX_EFFECT];
 
-void spawnEffect(int x, int y, int type)
+void spawnEffect(int x, int y, int type,int role)
 {
 	for (int i = 0; i < MAX_EFFECT; i++) {
 		if (!effects[i].active) {
-			effects[i] = { x, y, 18, type, true };
+			effects[i] = { x, y, 18, type,role, true };
 			return;
 		}
 	}
@@ -319,34 +320,130 @@ void drawEffects()
 {
 	for (int i = 0; i < MAX_EFFECT; i++) {
 		if (!effects[i].active) continue;
-		int alpha = effects[i].timer * 14;   // 越来越淡
-		int r = effects[i].timer * 3;        // 扩散半径
-		switch (effects[i].type) {
-		case 0: // 普攻：白色扩散圆
-			setcolor(RGB(255, 255, 200));
-			circle(effects[i].x, effects[i].y, r);
-			break;
-		case 1: // 技能1：青色圆环
-			setcolor(RGB(0, 220, 255));
-			circle(effects[i].x, effects[i].y, r * 2);
-			circle(effects[i].x, effects[i].y, r);
-			break;
-		case 2: // 技能2：金色大爆炸
-			setfillcolor(RGB(255, 200, 0));
-			solidcircle(effects[i].x, effects[i].y, r * 2);
-			setfillcolor(RGB(255, 255, 255));
-			solidcircle(effects[i].x, effects[i].y, r);
-			break;
-		case 3: // 技能3：紫色闪光
-			setcolor(RGB(180, 0, 255));
-			for (int j = 0; j < 6; j++) {
-				float ang = j * 3.14159f / 3.0f;
-				line(effects[i].x, effects[i].y,
-					effects[i].x + (int)(cosf(ang) * r * 2),
-					effects[i].y + (int)(sinf(ang) * r * 2));
+
+		int r = effects[i].timer * 3;   // 扩散半径
+		int cx = effects[i].x;
+		int cy = effects[i].y;
+		int t = effects[i].timer;
+
+		// ===================== 奇犽（电气系）=====================
+		if (effects[i].herorole == 0) {
+			switch (effects[i].type) {
+
+			case 0: // 普攻：白色闪电短线放射
+				setcolor(RGB(200, 230, 255));
+				for (int j = 0; j < 5; j++) {
+					float ang = j * 3.14159f * 2 / 5 + t * 0.3f;
+					line(cx, cy,
+						cx + (int)(cosf(ang) * r * 1.5f),
+						cy + (int)(sinf(ang) * r * 1.5f));
+				}
+				break;
+
+			case 1: // 技能1：蓝色电弧双环 + 内部闪光
+				setcolor(RGB(100, 200, 255));
+				circle(cx, cy, r);
+				circle(cx, cy, r * 2);
+				setcolor(RGB(255, 255, 255));
+				circle(cx, cy, r / 2);
+				break;
+
+			case 2: // 技能2（大招）：蓝白放射爆炸
+				setfillcolor(RGB(180, 220, 255));
+				solidcircle(cx, cy, r * 2);
+				setfillcolor(RGB(255, 255, 255));
+				solidcircle(cx, cy, r);
+				// 闪电射线
+				setcolor(RGB(0, 180, 255));
+				for (int j = 0; j < 8; j++) {
+					float ang = j * 3.14159f / 4;
+					line(cx, cy,
+						cx + (int)(cosf(ang) * r * 3),
+						cy + (int)(sinf(ang) * r * 3));
+				}
+				break;
+
+			case 3: // 技能3：蓝色球状闪电波
+				// 外层漫射光晕
+				setfillcolor(RGB(0, 60, 180));
+				solidcircle(cx, cy, r * 3);
+				// 中层亮蓝球体
+				setfillcolor(RGB(40, 140, 255));
+				solidcircle(cx, cy, r * 2);
+				// 内核白色核心
+				setfillcolor(RGB(200, 230, 255));
+				solidcircle(cx, cy, r);
+				// 旋转闪电射线（随timer旋转）
+				setcolor(RGB(150, 210, 255));
+				for (int j = 0; j < 6; j++) {
+					float ang = j * 3.14159f / 3.0f + t * 0.25f;  // 旋转
+					int ex = cx + (int)(cosf(ang) * r * 3.5f);
+					int ey = cy + (int)(sinf(ang) * r * 3.5f);
+					// 折线模拟闪电锯齿
+					int mx = cx + (int)(cosf(ang) * r * 1.8f);
+					int my = cy + (int)(sinf(ang) * r * 1.8f);
+					line(cx, cy, mx + (int)(sinf(ang) * r * 0.5f),
+						my - (int)(cosf(ang) * r * 0.5f));
+					line(mx + (int)(sinf(ang) * r * 0.5f),
+						my - (int)(cosf(ang) * r * 0.5f), ex, ey);
+				}
+				break;
 			}
-			break;
 		}
+
+		// ===================== 小杰（自然能量系）=====================
+		else {
+			switch (effects[i].type) {
+
+			case 0: // 普攻：绿色同心扩散圆
+				setcolor(RGB(80, 220, 80));
+				circle(cx, cy, r);
+				setcolor(RGB(200, 255, 100));
+				circle(cx, cy, r / 2);
+				break;
+
+			case 1: // 技能1：黄绿扇形冲击波
+				setcolor(RGB(180, 255, 60));
+				for (int j = -3; j <= 3; j++) {
+					float ang = 3.14159f + j * 0.15f; // 朝左发射
+					line(cx, cy,
+						cx + (int)(cosf(ang) * r * 2.5f),
+						cy + (int)(sinf(ang) * r * 2.5f));
+				}
+				setcolor(RGB(255, 230, 0));
+				circle(cx, cy, r);
+				break;
+
+			case 2: // 技能2（大招）：金橙大爆炸（千手棒）
+				setfillcolor(RGB(255, 160, 0));
+				solidcircle(cx, cy, r * 2);
+				setfillcolor(RGB(255, 255, 100));
+				solidcircle(cx, cy, r);
+				// 四向冲击棒
+				setcolor(RGB(255, 100, 0));
+				for (int j = 0; j < 4; j++) {
+					float ang = j * 3.14159f / 2;
+					// 粗线模拟棒状
+					for (int off = -3; off <= 3; off++) {
+						line(cx + off, cy,
+							cx + (int)(cosf(ang) * r * 3) + off,
+							cy + (int)(sinf(ang) * r * 3));
+					}
+				}
+				break;
+
+			case 3: // 技能3：橙色能量环脉冲
+				setcolor(RGB(255, 140, 0));
+				circle(cx, cy, r * 2);
+				setfillcolor(RGB(255, 200, 50));
+				solidcircle(cx, cy, r);
+				setcolor(RGB(255, 255, 200));
+				circle(cx, cy, r * 3);
+				break;
+			}
+		}
+
+		// ---- 每帧衰减 ----
 		effects[i].timer--;
 		if (effects[i].timer <= 0) effects[i].active = false;
 	}
@@ -369,6 +466,15 @@ struct hero {
 	int  currentSkill;   // 当前正在释放的技能编号（-1=无）
 	bool isAttacking;    // 是否在普通攻击动作中
 	int hitFlashTimer;   // 受击闪烁计时（>0时显示红色）
+
+	//----奇犽特有技能---//
+	int speedBoostTimer;   // 技能1加速剩余帧数
+	bool isDashing;        // 技能2突刺中
+	int dashTimer;         // 突刺剩余帧数
+	//----小杰---------//
+	int  xjChargeTimer;   // 技能1蓄力帧数
+	bool xjIsCharging;    // 是否正在蓄力
+	int  xjSwordTimer;    // 技能2光剑动画计时
 }qy, xj;
 
 struct herostates {
@@ -384,6 +490,15 @@ struct Bullet {
 	bool active;
 };
 const int MAX_BULLET = 10;//最大十个子弹
+
+struct HeroBullet {
+	float x, y;
+	float vx;
+	bool  active;
+	int   damage;
+};
+const int MAX_HERO_BULLET = 5;
+HeroBullet heroBullets[MAX_HERO_BULLET];
 
 struct Boss {
 	int locx, locy;
@@ -444,23 +559,104 @@ void handleAttack(hero* h)
 	for (int i = 0; i < 3; i++)
 		if (h->skillTimer[i] > 0) h->skillTimer[i]--;
 
+
+	// ============ 小杰专属技能（完全独立处理后 return）============
+	if (roles == 1) {
+		bool key1 = (GetAsyncKeyState('1') & 0x8000) != 0;
+		bool key2 = (GetAsyncKeyState('2') & 0x8000) != 0;
+		bool key3 = (GetAsyncKeyState('3') & 0x8000) != 0;
+
+		// ---- 技能1：蓄力光球（按住蓄力，松手释放）----
+		if (h->skillTimer[0] == 0) {
+			if (key1 && !h->xjIsCharging) {
+				h->xjIsCharging = true;   // 开始蓄力
+			}
+			if (h->xjIsCharging && key1) {
+				h->xjChargeTimer++;
+				if (h->xjChargeTimer > 120) h->xjChargeTimer = 120; // 最多蓄2秒
+			}
+			if (h->xjIsCharging && !key1) {
+				// 松手：按蓄力时间计算伤害（10帧=10伤，120帧=70伤）
+				int chargeDmg = 10 + h->xjChargeTimer / 2;
+				int dist = boss.locx - h->locx;
+				if (dist > 0 && dist < 250 && boss.survive) {
+					boss.lefthp -= chargeDmg;
+					if (boss.lefthp < 0) boss.lefthp = 0;
+					if (boss.lefthp == 0) boss.survive = false;
+				}
+				spawnEffect(h->locx + 110, h->locy + 40, 1, 1); // 释放爆炸特效
+				h->skillTimer[0] = xjSkills[0].cooldown;
+				h->xjChargeTimer = 0;
+				h->xjIsCharging = false;
+			}
+		}
+
+		// ---- 技能2：光剑挥动 ----
+		if (key2 && h->skillTimer[1] == 0 && h->castTimer == 0) {
+			h->xjSwordTimer = 22;          // 动画22帧
+			h->castTimer = 18;          // 前18帧锁定移动
+			h->skillTimer[1] = xjSkills[1].cooldown;
+		}
+		if (h->xjSwordTimer > 0) {
+			h->xjSwordTimer--;
+			if (h->xjSwordTimer == 11) {    // 挥到中段时结算伤害
+				int dist = boss.locx - h->locx;
+				if (dist > 0 && dist < 200 && boss.survive) {
+					boss.lefthp -= xjSkills[1].damage;
+					if (boss.lefthp < 0) boss.lefthp = 0;
+					if (boss.lefthp == 0) boss.survive = false;
+				}
+				spawnEffect(h->locx + 150, h->locy + 30, 2, 1);
+			}
+		}
+
+		// ---- 技能3：发射小光球 ----
+		if (key3 && h->skillTimer[2] == 0) {
+			h->skillTimer[2] = xjSkills[2].cooldown;
+			for (int i = 0; i < MAX_HERO_BULLET; i++) {
+				if (!heroBullets[i].active) {
+					heroBullets[i] = {
+						(float)(h->locx + 90),
+						(float)(h->locy + 45),
+						14.0f, true,
+						xjSkills[2].damage
+					};
+					break;
+				}
+			}
+		}
+		return; // xj处理完毕，跳过奇犽通用逻辑
+	}
+	// ============ 小杰专属结束 ============
+	
 	// 前摇期间不处理新输入
 	if (h->castTimer > 0) return;
 
-	// ---- 前摇结束时结算伤害 ----
+	// ---- 前摇结束时结算 ----
 	if (h->currentSkill >= 0) {
-		// 取当前角色的技能表
 		SkillData* sd = roles ? xjSkills : qySkills;
-		// 命中判定：Boss必须在攻击范围内（站在Boss左侧附近）
-		int dist = boss.locx - h->locx;
-		if (dist > 0 && dist < 300) {  // 300px内视为命中
-			boss.lefthp -= sd[h->currentSkill].damage;
-			if (boss.lefthp < 0) boss.lefthp = 0;
-			if (boss.lefthp == 0) boss.survive = false;
+
+		if (!roles && h->currentSkill == 0) {
+			// 奇犽技能1：加速Buff，不造成伤害
+			h->speedBoostTimer = 300;  // 约5秒（Sleep10ms≈100帧/秒）
+			spawnEffect(h->locx + 40, h->locy + 40, 1, 0); // 蓝色光环提示
+		}
+		else if (!roles && h->currentSkill == 1) {
+			// 奇犽技能2：启动突刺，伤害在move()里碰撞时结算
+			h->isDashing = true;
+			h->dashTimer = 36;        // 突刺持续18帧
+		}
+		else {
+			// 其余技能（奇犽技能3 / 小杰全部）：正常伤害判定
+			int dist = boss.locx - h->locx;
+			if (dist > 0 && dist < 300) {
+				boss.lefthp -= sd[h->currentSkill].damage;
+				if (boss.lefthp < 0) boss.lefthp = 0;
+				if (boss.lefthp == 0) boss.survive = false;
+			}
 		}
 		h->currentSkill = -1;
 	}
-	if (h->isAttacking) h->isAttacking = false;
 
 	// ---- J键普通攻击 ----
 	bool keyJ = (GetAsyncKeyState('J') & 0x8000) != 0;
@@ -472,7 +668,7 @@ void handleAttack(hero* h)
 
 		// 普通攻击前摇极短，直接在这里结算也可以
 		int dist = boss.locx - h->locx;
-		spawnEffect(h->locx + 80, h->locy + 40, 0);
+		spawnEffect(h->locx + 80, h->locy + 40, 0,roles);
 		if (dist > 0 && dist < 150) {  // 普通攻击范围更短
 			boss.lefthp -= 8;
 			if (boss.lefthp < 0) boss.lefthp = 0;
@@ -491,7 +687,7 @@ void handleAttack(hero* h)
 			h->castTimer = sd[i].castFrames;
 			h->skillTimer[i] = sd[i].cooldown;
 			h->currentSkill = i;
-			spawnEffect(h->locx + 80, h->locy + 40, h->currentSkill + 1);
+			spawnEffect(h->locx + 80, h->locy + 40, h->currentSkill + 1,roles);
 			break; // 同一帧只释放一个技能
 		}
 	}
@@ -523,14 +719,26 @@ void inithero()
 	xj.currentSkill = -1;
 	xj.isAttacking = false;
 	for (int i = 0; i < 3; i++) xj.skillTimer[i] = 0;
+
 	qy.hitFlashTimer = 0;
 	xj.hitFlashTimer = 0;
+	qy.speedBoostTimer = 0;
+	qy.isDashing = false;
+	qy.dashTimer = 0;
+	xj.speedBoostTimer = 0;
+	xj.isDashing = false;
+	xj.dashTimer = 0;
+
+	xj.xjChargeTimer = 0;
+	xj.xjIsCharging = false;
+	xj.xjSwordTimer = 0;
+	for (int i = 0; i < MAX_HERO_BULLET; i++) heroBullets[i].active = false;
 }
 
 void initboss()
 {
 	boss.locx = 900;           // Boss 固定在右侧
-	boss.locy = GROUND_Y;
+	boss.locy = GROUND_Y-30;
 	boss.totalhp = 100;
 	boss.lefthp = 100;
 	boss.survive = true;
@@ -660,7 +868,104 @@ void bossAI(hero* h)
 			if (h->lefthp == 0) h->survive = false;
 		}
 	}
-	handleAttack(&qy);
+	handleAttack(h);
+}
+
+// ---- 小杰技能1：蓄力光球实时绘制 ----
+void drawXJCharge(hero* h)
+{
+	if (!h->xjIsCharging) return;
+	int radius = 10 + h->xjChargeTimer / 4;
+	if (radius > 42) radius = 42;
+	int cx = h->locx + 110, cy = h->locy + 40;
+
+	// 外层光晕（随蓄力变大）
+	setfillcolor(RGB(200, 140, 0));
+	solidcircle(cx, cy, radius + 6);
+	// 主球体
+	setfillcolor(RGB(255, 210, 20));
+	solidcircle(cx, cy, radius);
+	// 内核
+	setfillcolor(RGB(255, 255, 180));
+	solidcircle(cx, cy, radius / 2);
+	// 满蓄力（>60帧）外圈白色闪烁
+	if (h->xjChargeTimer > 60 && (gameFrames % 6) < 3) {
+		setcolor(RGB(255, 255, 255));
+		circle(cx, cy, radius + 10);
+	}
+}
+
+// ---- 小杰技能2：光剑挥动绘制 ----
+void drawXJSword(hero* h)
+{
+	if (h->xjSwordTimer <= 0) return;
+	// progress 0.0（刚开始）→ 1.0（结束）
+	float progress = 1.0f - (float)h->xjSwordTimer / 22.0f;
+	float startAng = -0.75f;          // 右上方开始
+	float ang = startAng + progress * 1.5f; // 向右下挥
+	int sx = h->locx + 65, sy = h->locy + 35;
+
+	// 剑身（黄色粗线）
+	int ex = sx + (int)(cosf(ang) * 130);
+	int ey = sy + (int)(sinf(ang) * 130);
+	setcolor(RGB(255, 230, 60));
+	for (int off = -4; off <= 4; off++)
+		line(sx + off, sy, ex + off, ey);
+	// 剑光内芯
+	setcolor(RGB(255, 255, 220));
+	for (int off = -1; off <= 1; off++)
+		line(sx + off, sy, ex + off, ey);
+	// 挥动轨迹弧（5条渐隐线）
+	for (int j = 1; j <= 5; j++) {
+		float trailAng = ang - j * 0.13f;
+		int trailLen = 130 - j * 15;
+		int tx2 = sx + (int)(cosf(trailAng) * trailLen);
+		int ty2 = sy + (int)(sinf(trailAng) * trailLen);
+		setcolor(RGB(255, 200 - j * 20, 0));
+		line(sx, sy, tx2, ty2);
+	}
+}
+
+// ---- 小杰技能3：光球飞行更新 + 绘制 ----
+void updateAndDrawHeroBullets()
+{
+	for (int i = 0; i < MAX_HERO_BULLET; i++) {
+		if (!heroBullets[i].active) continue;
+		heroBullets[i].x += heroBullets[i].vx;
+
+		int cx = (int)heroBullets[i].x;
+		int cy = (int)heroBullets[i].y;
+
+		// 外层光晕
+		setfillcolor(RGB(255, 180, 0));
+		solidcircle(cx, cy, 16);
+		// 主球
+		setfillcolor(RGB(255, 240, 80));
+		solidcircle(cx, cy, 11);
+		// 内核
+		setfillcolor(RGB(255, 255, 210));
+		solidcircle(cx, cy, 5);
+		// 飞行轨迹（每帧在身后留3个渐隐点）
+		for (int j = 1; j <= 3; j++) {
+			setfillcolor(RGB(255, 200 - j * 30, 0));
+			solidcircle(cx - j * 14, cy, 8 - j * 2);
+		}
+
+		// 出界
+		if (heroBullets[i].x > 1300) {
+			heroBullets[i].active = false;
+			continue;
+		}
+		// 碰撞Boss
+		if (cx > boss.locx && cx < boss.locx + 120 &&
+			cy > boss.locy && cy < boss.locy + 120 && boss.survive) {
+			boss.lefthp -= heroBullets[i].damage;
+			if (boss.lefthp < 0) boss.lefthp = 0;
+			if (boss.lefthp == 0) boss.survive = false;
+			spawnEffect(cx, cy, 3, 1);           // 命中特效
+			heroBullets[i].active = false;
+		}
+	}
 }
 
 void drawBoss(IMAGE* bossImg)
@@ -684,7 +989,9 @@ void drawHUD(hero* h)
 	setfillcolor(RGB(60, 60, 60));
 	solidrectangle(30, 30, 230, 55);         // 背景
 	int playerBarW = 200 * h->lefthp / h->totalhp;
-	setfillcolor(RGB(80, 200, 80));
+	if(1.0*h->lefthp / h->totalhp>=0.5) setfillcolor(RGB(80, 200, 80));
+	else if (1.0 * h->lefthp / h->totalhp >= 0.2) setfillcolor(YELLOW);
+	else setfillcolor(RED);
 	solidrectangle(30, 30, 30 + playerBarW, 55);                       // 绿色血量
 	setbkmode(TRANSPARENT);
 	settextcolor(WHITE);
@@ -720,8 +1027,8 @@ void drawHUD(hero* h)
 	SkillData* sd = roles ? xjSkills : qySkills;
 	hero* h1 = &qy;
 	for (int i = 0; i < 3; i++) {
-		int bx = 490 + i * 100;  // 三个格子横排
-		int by = 700;
+		int bx = 510 + i * 100;  // 三个格子横排
+		int by = 50;
 
 		// 背景格
 		setfillcolor(RGB(40, 40, 40));
@@ -825,6 +1132,48 @@ void showLoseScreen()
 
 void move(hero* h)
 {
+	// ======== 突刺逻辑（最高优先级，castTimer不拦截）========
+	if (h->isDashing) {
+		if (h->dashTimer >= 18) {
+			h->locx += 35;          // 每帧向右冲28px（视觉上快速滑过）
+			lastad = 1;
+			h->dashTimer--;
+
+			// 碰撞判定：角色中心进入Boss碰撞箱
+			int heroCenter = h->locx + 50;
+			int dist = abs(boss.locx + 60 - heroCenter);  // Boss中心
+			if (dist < 120 && boss.survive) {
+				boss.lefthp -= qySkills[1].damage;
+				if (boss.lefthp < 0) boss.lefthp = 0;
+				if (boss.lefthp == 0) boss.survive = false;
+			}
+			// 突刺轨迹特效
+			spawnEffect(h->locx, h->locy + 40, 2, 0);
+		}
+		else {
+			h->locx -= 35;          // 每帧向右冲28px（视觉上快速滑过）
+			lastad = 0;
+			h->dashTimer--;
+
+			// 碰撞判定：角色中心进入Boss碰撞箱
+			int heroCenter = h->locx + 50;
+			int dist = abs(boss.locx + 60 - heroCenter);  // Boss中心
+			if (dist < 120 && boss.survive) {
+				boss.lefthp -= qySkills[1].damage;
+				if (boss.lefthp < 0) boss.lefthp = 0;
+				if (boss.lefthp == 0) boss.survive = false;
+			}
+			// 突刺轨迹特效
+			spawnEffect(h->locx, h->locy + 40, 2, 0);
+		}
+
+		// 撞墙或时间到停止
+		if (h->locx >= RIGHT_BOUND) h->locx = RIGHT_BOUND;
+		if (h->dashTimer <= 0)  h->isDashing = false;
+		return;   // 突刺期间屏蔽所有其他移动输入
+	}
+
+	// ======== 前摇期间锁定 ========
 	if (h->castTimer > 0) return;
 
 	static bool lastW = false;
@@ -834,34 +1183,42 @@ void move(hero* h)
 	bool keyD = (GetAsyncKeyState('D') & 0x8000) != 0;
 	bool keyF = (GetAsyncKeyState('F') & 0x8000) != 0;
 
-	// 根据按键更新坐标
+	// ======== 技能1加速Buff ========
+	int spd = 5;
+	if (h->speedBoostTimer > 0) {
+		spd = 15;                // 三倍速
+		h->speedBoostTimer--;
+		// 加速中每帧生成残影特效
+		if (h->speedBoostTimer % 3 == 0)
+			spawnEffect(h->locx + 40, h->locy + 40, 1, 0);
+	}
+
+	// ======== 正常移动 ========
 	if (keyA) {
-		h->locx -= 5; lastad = 0;
+		h->locx -= spd; lastad = 0;
 		if (h->locx < LEFT_BOUND) h->locx = LEFT_BOUND;
 	}
 	if (keyD) {
-		h->locx += 5; lastad = 1;
+		h->locx += spd; lastad = 1;
 		if (h->locx > RIGHT_BOUND) h->locx = RIGHT_BOUND;
 	}
 	if (keyF) {
-		h->locx += 10; lastad = 1;
+		h->locx += spd * 2; lastad = 1;
 		if (h->locx > RIGHT_BOUND) h->locx = RIGHT_BOUND;
 	}
-	//二段跳
+
+	// 二段跳
 	bool wPressed = keyW && !lastW;
 	if (wPressed && h->jumpcount < 2) {
-		h->velY = JUMP_POWER;   // 给一个向上的速度
+		h->velY = JUMP_POWER;
 		h->jumpcount++;
 		h->onground = false;
-		h->iscrouching = false; // 跳跃时取消下蹲
-	}
-	lastW = keyW;
-	if (keyS && h->onground) {
-		h->iscrouching = true;
-	}
-	else if (!keyS) {
 		h->iscrouching = false;
 	}
+	lastW = keyW;
+
+	if (keyS && h->onground) h->iscrouching = true;
+	else if (!keyS)          h->iscrouching = false;
 }
 
 void applyPhysics(hero* h)//重力系统
@@ -897,7 +1254,7 @@ void itg() //inside the game
 		initgraph(1280, 750);                                      //奇犽：a 小杰 ：b
 		IMAGE background;                                          //直立：a 跳跃：b 蹲下：c
 		IMAGE bossImg;														   //左：a 右 b
-		loadimage(&bossImg, _T("xj_left_resized.bmp"));
+		loadimage(&bossImg, _T("boss.bmp"));
 		loadimage(&qysta.stand[0], _T("qy_left_resized.bmp"));
 		loadimage(&qysta.stand[1], _T("qy_right_resized.bmp"));
 		loadimage(&qysta.jump[0], _T("qy_jump_left_resized.bmp"));
@@ -942,16 +1299,24 @@ void itg() //inside the game
 			//tool();
 			if (!gameWin && !gameLose) {
 				gameFrames++;//计算时间
-				move(&qy);
-				applyPhysics(&qy);
-				bossAI(&qy);//bossai里面有handleattack
-				IMAGE* t = getHeroFrame(&qy);
+				hero* ah = roles ? &xj : &qy;   // ah = active hero
+				move(ah);
+				applyPhysics(ah);
+				bossAI(ah);                      // bossAI 内调 handleAttack(h)，已修复
+				IMAGE* t = getHeroFrame(ah);
+				putImageTransparent(ah->locx, ah->locy, t);
 
-				putImageTransparent(qy.locx, qy.locy, t);
+				// 小杰专属绘制（在角色图之上）
+				if (roles == 1) {
+					drawXJCharge(ah);
+					drawXJSword(ah);
+				}
+				updateAndDrawHeroBullets();
+
 				drawBoss(&bossImg);
 				drawEffects();
-				drawHUD(&qy);
-				int result = checkGameOver(&qy);
+				drawHUD(ah);
+				int result = checkGameOver(ah);
 			}
 			// ---- 结算界面 ----
 			if (gameWin) {
