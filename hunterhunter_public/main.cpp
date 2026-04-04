@@ -260,16 +260,16 @@ struct SkillData {
 };
 
 SkillData qySkills[3] = {
-	{20, 25, 180},   // 技能1：前摇短、伤害中、冷却3秒
+	{20, 25, 420},   // 技能1：前摇短、伤害中、冷却3秒
 	{40, 3, 300},   // 技能2：
 	{10, 15, 120},   // 技能3：前摇很短、伤害低、冷却2秒
 };
 
 // 小杰三个技能
 SkillData xjSkills[3] = {
-	{15, 20, 150},   // 技能1
-	{50, 60, 360},   // 技能2：大招，前摇最长
-	{25, 30, 200},   // 技能3
+	{15, 150, 150},   // 技能1
+	{50, 40, 360},   // 技能2
+	{25, 20, 200},   // 技能3
 };
 
 //特效
@@ -577,7 +577,11 @@ void handleAttack(hero* h)
 			}
 			if (h->xjIsCharging && !key1) {
 				// 松手：按蓄力时间计算伤害（10帧=10伤，120帧=70伤）
-				int chargeDmg = 10 + h->xjChargeTimer / 2;
+				int chargeDmg = (int)(10 + h->xjChargeTimer / 2)*(xjSkills[1].damage/50.0);
+
+				h->lefthp -= chargeDmg*(0.5);//伤害折半自我损耗 
+				if (h->lefthp <= 0) h->survive = false;
+
 				int dist = boss.locx - h->locx;
 				if (dist > 0 && dist < 250 && boss.survive) {
 					boss.lefthp -= chargeDmg;
@@ -638,7 +642,7 @@ void handleAttack(hero* h)
 
 		if (!roles && h->currentSkill == 0) {
 			// 奇犽技能1：加速Buff，不造成伤害
-			h->speedBoostTimer = 300;  // 约5秒（Sleep10ms≈100帧/秒）
+			h->speedBoostTimer = 180;  // 约3秒
 			spawnEffect(h->locx + 40, h->locy + 40, 1, 0); // 蓝色光环提示
 		}
 		else if (!roles && h->currentSkill == 1) {
@@ -1135,7 +1139,7 @@ void move(hero* h)
 	// ======== 突刺逻辑（最高优先级，castTimer不拦截）========
 	if (h->isDashing) {
 		if (h->dashTimer >= 18) {
-			h->locx += 35;          // 每帧向右冲28px（视觉上快速滑过）
+			h->locx += 20;          // 每帧向右冲28px（视觉上快速滑过）
 			lastad = 1;
 			h->dashTimer--;
 
@@ -1151,7 +1155,7 @@ void move(hero* h)
 			spawnEffect(h->locx, h->locy + 40, 2, 0);
 		}
 		else {
-			h->locx -= 35;          // 每帧向右冲28px（视觉上快速滑过）
+			h->locx -= 20;          // 每帧向右冲28px（视觉上快速滑过）
 			lastad = 0;
 			h->dashTimer--;
 
