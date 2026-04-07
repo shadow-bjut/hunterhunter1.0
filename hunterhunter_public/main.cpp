@@ -28,6 +28,7 @@ bool  gameWin = false;
 bool  gameLose = false;
 
 
+
 void loadRank()
 {
 	memset(rankList, 0, sizeof(rankList));
@@ -261,7 +262,7 @@ struct SkillData {
 
 SkillData qySkills[3] = {
 	{20, 25, 420},   // 技能1：前摇短、伤害中、冷却3秒
-	{40, 3, 300},   // 技能2：
+	{40, 45, 300},   // 技能2：
 	{10, 15, 120},   // 技能3：前摇很短、伤害低、冷却2秒
 };
 
@@ -466,6 +467,7 @@ struct hero {
 	int  currentSkill;   // 当前正在释放的技能编号（-1=无）
 	bool isAttacking;    // 是否在普通攻击动作中
 	int hitFlashTimer;   // 受击闪烁计时（>0时显示红色）
+	int invincibleTimer; //无敌帧
 
 	//----奇犽特有技能---//
 	int speedBoostTimer;   // 技能1加速剩余帧数
@@ -511,7 +513,10 @@ struct Boss {
 	int damage; //伤害
 	int bulletPattern;   // 0=直线 1=散射 2=追踪
 	Bullet bullets[MAX_BULLET];//子弹库；
+	float bossVelX;     // 水平移动速度
+	int   moveTimer;    // 移动方向计时器
 }boss;
+
 
 // 得分公式：基础分 + 血量奖励 - 时间惩罚
 // 基础分1000，每1hp加10分，每秒超过30秒扣5分
@@ -554,6 +559,7 @@ int checkGameOver(hero* h)//是否胜利
 void handleAttack(hero* h)
 {
 	// ---- 所有计时器每帧-1 ----
+	if (h->invincibleTimer > 0) h->invincibleTimer--;
 	if (h->attackTimer > 0) h->attackTimer--;
 	if (h->castTimer > 0) h->castTimer--;
 	for (int i = 0; i < 3; i++)
@@ -576,11 +582,19 @@ void handleAttack(hero* h)
 				if (h->xjChargeTimer > 120) h->xjChargeTimer = 120; // 最多蓄2秒
 			}
 			if (h->xjIsCharging && !key1) {
-				// 松手：按蓄力时间计算伤害（10帧=10伤，120帧=70伤）
-				int chargeDmg = (int)(10 + h->xjChargeTimer / 2)*(xjSkills[1].damage/50.0);
+				// 蓄力伤害：最低10，蓄满约40，不超过Boss总血量的25%
+				int chargeDmg = 10 + h->xjChargeTimer / 3;      
+				int dmgCap = boss.totalhp / 4;                   //25%上限
+				if (chargeDmg > dmgCap) chargeDmg = dmgCap;
 
-				h->lefthp -= chargeDmg*(0.5);//伤害折半自我损耗 
-				if (h->lefthp <= 0) h->survive = false;
+				// 自我损耗：只扣技能伤害的20%
+				int selfDmg = chargeDmg / 5;                     
+				if (h->invincibleTimer == 0) {                  
+					h->lefthp -= selfDmg;
+					h->hitFlashTimer = 12;
+					h->invincibleTimer = 30;                     // ← 释放后给短暂无敌
+					if (h->lefthp <= 0) h->survive = false;
+				}
 
 				int dist = boss.locx - h->locx;
 				if (dist > 0 && dist < 250 && boss.survive) {
@@ -588,7 +602,7 @@ void handleAttack(hero* h)
 					if (boss.lefthp < 0) boss.lefthp = 0;
 					if (boss.lefthp == 0) boss.survive = false;
 				}
-				spawnEffect(h->locx + 110, h->locy + 40, 1, 1); // 释放爆炸特效
+				spawnEffect(h->locx + 110, h->locy + 40, 1, 1);
 				h->skillTimer[0] = xjSkills[0].cooldown;
 				h->xjChargeTimer = 0;
 				h->xjIsCharging = false;
@@ -629,6 +643,30 @@ void handleAttack(hero* h)
 				}
 			}
 		}
+		// ---- 前摇结束时结算 ----
+		if (h->currentSkill == -2) {          // 普攻前摇结束
+			int dist = boss.locx - h->locx;
+			spawnEffect(h->locx + 80, h->locy + 40, 0, roles);
+			if (dist > 0 && dist < 150) {
+				boss.lefthp -= 8;
+				if (boss.lefthp < 0) boss.lefthp = 0;
+				if (boss.lefthp == 0) boss.survive = false;
+			}
+			h->currentSkill = -1;
+			h->isAttacking = false;
+			return;
+		}
+
+		// ---- J键普通攻击 ----
+		bool keyJ = (GetAsyncKeyState('J') & 0x8000) != 0;
+		if (keyJ && h->attackTimer == 0) {
+			h->attackTimer = 30;   // 0.5秒冷却
+			h->castTimer = 10;   // 前摇10帧
+			h->currentSkill = -2;   // -2表示普通攻击（特殊标记）
+			h->isAttacking = true;
+
+			return;
+		}
 		return; // xj处理完毕，跳过奇犽通用逻辑
 	}
 	// ============ 小杰专属结束 ============
@@ -661,6 +699,19 @@ void handleAttack(hero* h)
 		}
 		h->currentSkill = -1;
 	}
+	// ---- 前摇结束时结算 ----
+	if (h->currentSkill == -2) {          // 普攻前摇结束
+		int dist = boss.locx - h->locx;
+		spawnEffect(h->locx + 80, h->locy + 40, 0, roles);
+		if (dist > 0 && dist < 150) {
+			boss.lefthp -= 8;
+			if (boss.lefthp < 0) boss.lefthp = 0;
+			if (boss.lefthp == 0) boss.survive = false;
+		}
+		h->currentSkill = -1;
+		h->isAttacking = false;
+		return;
+	}
 
 	// ---- J键普通攻击 ----
 	bool keyJ = (GetAsyncKeyState('J') & 0x8000) != 0;
@@ -670,16 +721,6 @@ void handleAttack(hero* h)
 		h->currentSkill = -2;   // -2表示普通攻击（特殊标记）
 		h->isAttacking = true;
 
-		// 普通攻击前摇极短，直接在这里结算也可以
-		int dist = boss.locx - h->locx;
-		spawnEffect(h->locx + 80, h->locy + 40, 0,roles);
-		if (dist > 0 && dist < 150) {  // 普通攻击范围更短
-			boss.lefthp -= 8;
-			if (boss.lefthp < 0) boss.lefthp = 0;
-			if (boss.lefthp == 0) boss.survive = false;
-			
-		}
-		h->currentSkill = -1;
 		return;
 	}
 
@@ -737,6 +778,9 @@ void inithero()
 	xj.xjIsCharging = false;
 	xj.xjSwordTimer = 0;
 	for (int i = 0; i < MAX_HERO_BULLET; i++) heroBullets[i].active = false;
+
+	qy.invincibleTimer = 0;
+	xj.invincibleTimer = 0;
 }
 
 void initboss()
@@ -767,6 +811,9 @@ void initboss()
 	// 清空所有弹幕
 	for (int i = 0; i < MAX_BULLET; i++)
 		boss.bullets[i].active = false;
+
+	boss.bossVelX = 0;
+	boss.moveTimer = 0;
 }
 void initgame()//游戏初始化
 {
@@ -787,6 +834,33 @@ void bossAI(hero* h)
 	else if (hpPercent <= 60 && boss.phase < 1) {
 		boss.phase = 1;
 		boss.attackInterval = max(40, boss.attackInterval - 10); // 半血加速
+	}
+	// ---- Boss 移动逻辑（阶段1以上才开始走动）----
+	if (boss.phase >= 1) {
+		boss.moveTimer--;
+		if (boss.moveTimer <= 0) {
+			// 每隔一段时间重新决定方向
+			int dist =abs(h->locx - boss.locx) ;
+			if (dist > 200) {
+				boss.bossVelX = -2.0f;          // 玩家离太远，向左靠近
+			}
+			else if (dist < 80) {
+				boss.bossVelX = 2.0f;           // 玩家太近，向右躲避
+			}
+			else {
+				boss.bossVelX = 0;              // 距离合适，原地
+			}
+			// 阶段2时随机加入横冲动作
+			if (boss.phase == 2 && rand() % 3 == 0) {
+				boss.bossVelX = (rand() % 2 == 0) ? -4.0f : 4.0f;
+			}
+			boss.moveTimer = 40 + rand() % 40;  // 40~80帧后重新决定
+		}
+		boss.locx += (int)boss.bossVelX;
+
+		// Boss 活动范围限制（右侧700~100之间）
+		if (boss.locx < 700)  boss.locx = 700;
+		if (boss.locx > 1000) boss.locx = 1000;
 	}
 
 	// ---- 攻击计时 ----
@@ -863,12 +937,19 @@ void bossAI(hero* h)
 		int by = (int)boss.bullets[i].y;
 
 		if (bx > hx && bx < hx + hw && by > hy && by < hy + hh) {
+
+			if (h->invincibleTimer > 0) {          // ← 新增：无敌期间跳过
+				boss.bullets[i].active = false;    //   但子弹仍然消失（不穿透）
+				continue;
+			}
+
 			int actualdamage = boss.damage;
 			if (h->iscrouching) actualdamage = boss.damage / 2;
 			h->lefthp -= actualdamage;
 			h->hitFlashTimer = 12;
+			h->invincibleTimer = 60;               // ← 新增：被打后给60帧（约0.6秒）无敌
 			if (h->lefthp < 0) h->lefthp = 0;
-			boss.bullets[i].active = false;           // 击中后弹幕消失
+			boss.bullets[i].active = false;
 			if (h->lefthp == 0) h->survive = false;
 		}
 	}
@@ -1138,43 +1219,31 @@ void move(hero* h)
 {
 	// ======== 突刺逻辑（最高优先级，castTimer不拦截）========
 	if (h->isDashing) {
-		if (h->dashTimer >= 18) {
-			h->locx += 20;          // 每帧向右冲28px（视觉上快速滑过）
-			lastad = 1;
-			h->dashTimer--;
+		int dashDir = lastad ? 1 : -1;        // ← 按起手方向决定
+		h->locx += 22 * dashDir;              // 每帧冲22px
+		h->dashTimer--;
 
-			// 碰撞判定：角色中心进入Boss碰撞箱
-			int heroCenter = h->locx + 50;
-			int dist = abs(boss.locx + 60 - heroCenter);  // Boss中心
-			if (dist < 120 && boss.survive) {
-				boss.lefthp -= qySkills[1].damage;
-				if (boss.lefthp < 0) boss.lefthp = 0;
-				if (boss.lefthp == 0) boss.survive = false;
-			}
-			// 突刺轨迹特效
-			spawnEffect(h->locx, h->locy + 40, 2, 0);
-		}
-		else {
-			h->locx -= 20;          // 每帧向右冲28px（视觉上快速滑过）
-			lastad = 0;
-			h->dashTimer--;
+		// 边界限制
+		if (h->locx < LEFT_BOUND)  h->locx = LEFT_BOUND;
+		if (h->locx > RIGHT_BOUND) h->locx = RIGHT_BOUND;
 
-			// 碰撞判定：角色中心进入Boss碰撞箱
-			int heroCenter = h->locx + 50;
-			int dist = abs(boss.locx + 60 - heroCenter);  // Boss中心
-			if (dist < 120 && boss.survive) {
-				boss.lefthp -= qySkills[1].damage;
-				if (boss.lefthp < 0) boss.lefthp = 0;
-				if (boss.lefthp == 0) boss.survive = false;
-			}
-			// 突刺轨迹特效
+		// 碰撞判定
+		int heroCenter = h->locx + 50;
+		int dist = abs(boss.locx + 60 - heroCenter);
+		if (dist < 120 && boss.survive) {
+			// 突刺只打一次，打中后立即终止
+			boss.lefthp -= qySkills[1].damage;
+			if (boss.lefthp < 0) boss.lefthp = 0;
+			if (boss.lefthp == 0) boss.survive = false;
+			h->isDashing = false;             // ← 打中立即停止，不重复结算
 			spawnEffect(h->locx, h->locy + 40, 2, 0);
+			return;
 		}
 
-		// 撞墙或时间到停止
-		if (h->locx >= RIGHT_BOUND) h->locx = RIGHT_BOUND;
-		if (h->dashTimer <= 0)  h->isDashing = false;
-		return;   // 突刺期间屏蔽所有其他移动输入
+		spawnEffect(h->locx, h->locy + 40, 2, 0);
+
+		if (h->dashTimer <= 0) h->isDashing = false;
+		return;
 	}
 
 	// ======== 前摇期间锁定 ========
@@ -1250,7 +1319,6 @@ IMAGE* getHeroFrame(hero* h)
 	return &sta->stand[dir];
 }
 
-
 void itg() //inside the game
 {
 	if (isstart)                                                   ////////////////////////////////////
@@ -1301,6 +1369,7 @@ void itg() //inside the game
 				outtextxy(qy.locx + 20, qy.locy - 10 - (12 - qy.hitFlashTimer) * 2, dmgBuf);
 			}
 			hero* ah = roles ? &xj : &qy;   // ah = active hero
+
 			//tool();
 			if (!gameWin && !gameLose) {
 				gameFrames++;//计算时间
@@ -1320,7 +1389,9 @@ void itg() //inside the game
 				drawBoss(&bossImg);
 				drawEffects();
 				drawHUD(ah);
-				int result = checkGameOver(ah);
+				if (checkGameOver(ah) != 0) {
+					// 游戏结束，停止更新逻辑
+				}
 			}
 			// ---- 结算界面 ----
 			if (gameWin) {
