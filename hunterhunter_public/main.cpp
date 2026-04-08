@@ -7,6 +7,7 @@
 #include<math.h>
 #define RANK_FILE "scores.dat"
 #define RANK_SIZE 5
+const int FPS = 100;   // Sleep(10) ≈ 100帧/秒
 struct RankEntry {
 	char name[22];   // 最多21字符 + '\0'
 	int  score;
@@ -522,7 +523,7 @@ struct Boss {
 // 基础分1000，每1hp加10分，每秒超过30秒扣5分
 int calcScore(hero* h)
 {
-	int timeSeconds = gameFrames / 60;        // 帧数÷60≈秒数
+	int timeSeconds = gameFrames / FPS;
 	int score = 1000;
 	score += h->lefthp * 10;                  // 血量奖励
 	int overTime = max(0, timeSeconds - 30);  // 超过30秒开始扣分
@@ -554,6 +555,35 @@ int checkGameOver(hero* h)//是否胜利
 		return 2;
 	}
 	return 0;
+}
+
+// ---- 新增：普攻结算（奇犽和小杰共用）----
+void resolveNormalAttack(hero* h)
+{
+	int dist = boss.locx - h->locx;
+	spawnEffect(h->locx + 80, h->locy + 40, 0, roles);
+	if (dist > 0 && dist < 150 && boss.survive) {
+		boss.lefthp -= 8;
+		if (boss.lefthp < 0) boss.lefthp = 0;
+		if (boss.lefthp == 0) boss.survive = false;
+	}
+	h->currentSkill = -1;
+	h->isAttacking = false;
+}
+
+// ---- 新增：J键普攻输入检测（奇犽和小杰共用）----
+// 返回true表示本帧触发了普攻，外层应该return
+bool handleNormalAttackInput(hero* h)
+{
+	bool keyJ = (GetAsyncKeyState('J') & 0x8000) != 0;
+	if (keyJ && h->attackTimer == 0) {
+		h->attackTimer = 30;
+		h->castTimer = 10;
+		h->currentSkill = -2;
+		h->isAttacking = true;
+		return true;
+	}
+	return false;
 }
 
 void handleAttack(hero* h)
@@ -645,28 +675,9 @@ void handleAttack(hero* h)
 		}
 		// ---- 前摇结束时结算 ----
 		if (h->currentSkill == -2) {          // 普攻前摇结束
-			int dist = boss.locx - h->locx;
-			spawnEffect(h->locx + 80, h->locy + 40, 0, roles);
-			if (dist > 0 && dist < 150) {
-				boss.lefthp -= 8;
-				if (boss.lefthp < 0) boss.lefthp = 0;
-				if (boss.lefthp == 0) boss.survive = false;
-			}
-			h->currentSkill = -1;
-			h->isAttacking = false;
-			return;
+			resolveNormalAttack(h); return;
 		}
-
-		// ---- J键普通攻击 ----
-		bool keyJ = (GetAsyncKeyState('J') & 0x8000) != 0;
-		if (keyJ && h->attackTimer == 0) {
-			h->attackTimer = 30;   // 0.5秒冷却
-			h->castTimer = 10;   // 前摇10帧
-			h->currentSkill = -2;   // -2表示普通攻击（特殊标记）
-			h->isAttacking = true;
-
-			return;
-		}
+		if (handleNormalAttackInput(h)) return;
 		return; // xj处理完毕，跳过奇犽通用逻辑
 	}
 	// ============ 小杰专属结束 ============
@@ -700,29 +711,8 @@ void handleAttack(hero* h)
 		h->currentSkill = -1;
 	}
 	// ---- 前摇结束时结算 ----
-	if (h->currentSkill == -2) {          // 普攻前摇结束
-		int dist = boss.locx - h->locx;
-		spawnEffect(h->locx + 80, h->locy + 40, 0, roles);
-		if (dist > 0 && dist < 150) {
-			boss.lefthp -= 8;
-			if (boss.lefthp < 0) boss.lefthp = 0;
-			if (boss.lefthp == 0) boss.survive = false;
-		}
-		h->currentSkill = -1;
-		h->isAttacking = false;
-		return;
-	}
-
-	// ---- J键普通攻击 ----
-	bool keyJ = (GetAsyncKeyState('J') & 0x8000) != 0;
-	if (keyJ && h->attackTimer == 0) {
-		h->attackTimer = 30;   // 0.5秒冷却
-		h->castTimer = 10;   // 前摇10帧
-		h->currentSkill = -2;   // -2表示普通攻击（特殊标记）
-		h->isAttacking = true;
-
-		return;
-	}
+	if (h->currentSkill == -2) { resolveNormalAttack(h); return; } 
+	if (handleNormalAttackInput(h)) return;                         
 
 	// ---- 1/2/3技能 ----
 	SkillData* sd = roles ? xjSkills : qySkills;
@@ -1110,7 +1100,7 @@ void drawHUD(hero* h)
 
 	// -------- 技能冷却显示（屏幕下方中央）--------
 	SkillData* sd = roles ? xjSkills : qySkills;
-	hero* h1 = &qy;
+	hero* h1 = roles ? &xj : &qy;   // ← 跟随当前角色
 	for (int i = 0; i < 3; i++) {
 		int bx = 510 + i * 100;  // 三个格子横排
 		int by = 50;
@@ -1397,29 +1387,20 @@ void itg() //inside the game
 			if (gameWin) {
 				drawBoss(&bossImg);
 				showWinScreen(ah);
-				EndBatchDraw(); // 先结束当前帧再弹输入框
-
 				if (GetAsyncKeyState('R') & 0x8000) {
-					Sleep(200); // 防止R键残留
-					char nickname[22] = { 0 };
-					inputNickname(nickname);  // 独立运行，不嵌套在BatchDraw里
-					saveRank(finalScore, nickname);
-
-					// 存档成功提示
-					BeginBatchDraw();
-					setfillcolor(RGB(0, 100, 0));
-					solidrectangle(400, 340, 880, 390);
-					settextstyle(22, 0, _T("黑体"));
-					settextcolor(RGB(150, 255, 150));
-					setbkmode(TRANSPARENT);
-					TCHAR tip[48];
-					_stprintf_s(tip, _T("已保存：%hs  得分：%d"), nickname, finalScore);
-					outtextxy(415, 353, tip);
 					EndBatchDraw();
-					Sleep(1500); // 显示1.5秒后退出
+					Sleep(200);
+					char nickname[22] = {};
+					inputNickname(nickname);
+					saveRank(finalScore, nickname);
+					// 显示保存提示
+					BeginBatchDraw();
+					// ...提示文字...
+					EndBatchDraw();
+					Sleep(1500);
 					break;
 				}
-				BeginBatchDraw(); // 没按R就继续下一帧
+				// 不按R就正常走到循环末尾的EndBatchDraw
 			}
 
 			if (gameLose) {

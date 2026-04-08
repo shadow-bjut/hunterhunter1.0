@@ -1,7 +1,7 @@
 ﻿  main.cpp
   正在生成代码
-  3 of 50 functions ( 6.0%) were compiled, the rest were copied from previous compilation.
+  3 of 52 functions ( 5.8%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    1 functions had inline decision re-evaluated but remain unchanged
+    4 functions had inline decision re-evaluated but remain unchanged
   已完成代码的生成
   hunterhunter_public.vcxproj -> C:\Users\shadow\Desktop\课设\hunterhunter_public\x64\Release\hunterhunter_public.exe
