@@ -1,8 +1,10 @@
 #pragma comment(lib, "Msimg32.lib")
+#pragma comment(lib, "winmm.lib")          // ← 新增：多媒体库
 #define _CRT_SECURE_NO_WARNINGS
 #include<graphics.h>
 #include<conio.h>
 #include<Windows.h>
+#include <mmsystem.h> 
 #include<stdio.h>
 #include<math.h>
 #define RANK_FILE "scores.dat"
@@ -27,8 +29,42 @@ int   gameFrames = 0;    // 游戏运行帧数（每帧+1）
 int   finalScore = 0;    // 最终得分（结算时计算）
 bool  gameWin = false;
 bool  gameLose = false;
+bool mute = false;
 
 
+// ============================================================
+// 背景音乐控制（基于 MCI，支持 MP3）
+// 用法：
+//   playBGM("menu.mp3");   // 播放并循环
+//   stopBGM();             // 停止
+// ============================================================
+static char g_bgmAlias[32] = "";   // 当前已打开的别名
+
+void stopBGM()
+{
+	if (g_bgmAlias[0] == '\0') return;
+	mciSendStringA("stop bgm", NULL, 0, NULL);
+	mciSendStringA("close bgm", NULL, 0, NULL);
+	g_bgmAlias[0] = '\0';
+}
+
+// 播放一首新 BGM（自动停止上一首）
+// repeat=true 时无限循环
+void playBGM(const char* filename, bool repeat = true)
+{
+	stopBGM();
+
+	char cmd[256];
+	sprintf_s(cmd, "open \"%s\" type mpegvideo alias bgm", filename);
+	if (mciSendStringA(cmd, NULL, 0, NULL) != 0) return;  // 文件不存在则跳过
+
+	strcpy_s(g_bgmAlias, "bgm");
+
+	if (repeat)
+		mciSendStringA("play bgm repeat", NULL, 0, NULL);
+	else
+		mciSendStringA("play bgm", NULL, 0, NULL);
+}
 
 void loadRank()
 {
@@ -107,7 +143,7 @@ void inputNickname(char* outName)
 
 		EndBatchDraw();
 
-		// ---- 改用 WM_KEYDOWN + GetKeyState 判断字符 ----
+		// ---- WM_KEYDOWN + GetKeyState 判断字符 ----
 		ExMessage msg;
 		if (peekmessage(&msg, EX_KEY) && msg.message == WM_KEYDOWN)
 		{
@@ -184,6 +220,7 @@ void srad()//select roles and difficulties and whether game start
 		if (tx >= 614 && tx <= 719 && ty >= 219 && ty <= 267) difficulties = 0;
 		if (tx >= 786 && tx <= 891 && ty >= 219 && ty <= 267) difficulties = 1;
 		if (tx >= 520 && tx <= 808 && ty >= 700 && ty <= 772) isstart = true;
+		if (tx >= 100 && tx <= 350 && ty >= 719 && ty <= 780) mute = true;
 	}
 	//tool(); 需要坐标再调用
 }
@@ -229,6 +266,7 @@ void sr() // showrank
 void initmenu()
 {
 	initgraph(1280, 750);
+	playBGM("menu1.mp3");
 	IMAGE background;
 	loadimage(&background, _T("Hunter-X-Hunter.jpg"));
 	putimage(0, 0, &background);
@@ -246,10 +284,14 @@ void initmenu()
 		srad();
 		sps();
 		ss();
+		outtextxy(100, 719, _T("点击此处静音"));
+		if (mute) settextcolor(RED);
+		if (mute) stopBGM();
 		Sleep(10);
 		EndBatchDraw();
 		if(isstart) break;
 	}
+	if(!mute) stopBGM();
 	closegraph();
 }
 
@@ -557,7 +599,7 @@ int checkGameOver(hero* h)//是否胜利
 	return 0;
 }
 
-// ---- 新增：普攻结算（奇犽和小杰共用）----
+// ----普攻结算（奇犽和小杰共用）----
 void resolveNormalAttack(hero* h)
 {
 	int dist = boss.locx - h->locx;
@@ -571,8 +613,7 @@ void resolveNormalAttack(hero* h)
 	h->isAttacking = false;
 }
 
-// ---- 新增：J键普攻输入检测（奇犽和小杰共用）----
-// 返回true表示本帧触发了普攻，外层应该return
+// ---- J键普攻输入检测（奇犽和小杰共用）----
 bool handleNormalAttackInput(hero* h)
 {
 	bool keyJ = (GetAsyncKeyState('J') & 0x8000) != 0;
@@ -840,15 +881,11 @@ void bossAI(hero* h)
 			else {
 				boss.bossVelX = 0;              // 距离合适，原地
 			}
-			// 阶段2时随机加入横冲动作
-			if (boss.phase == 2 && rand() % 3 == 0) {
-				boss.bossVelX = (rand() % 2 == 0) ? -4.0f : 4.0f;
-			}
-			boss.moveTimer = 40 + rand() % 40;  // 40~80帧后重新决定
+			boss.moveTimer = 40;
 		}
 		boss.locx += (int)boss.bossVelX;
 
-		// Boss 活动范围限制（右侧700~100之间）
+		// Boss 活动范围限制（右侧700~1000之间）
 		if (boss.locx < 700)  boss.locx = 700;
 		if (boss.locx > 1000) boss.locx = 1000;
 	}
@@ -1313,6 +1350,7 @@ void itg() //inside the game
 {
 	if (isstart)                                                   ////////////////////////////////////
 	{                                                              //命名方式：人物 状态 朝向
+		if(!mute)playBGM("battle.mp3");
 		initgraph(1280, 750);                                      //奇犽：a 小杰 ：b
 		IMAGE background;                                          //直立：a 跳跃：b 蹲下：c
 		IMAGE bossImg;														   //左：a 右 b
@@ -1417,6 +1455,7 @@ void itg() //inside the game
 			EndBatchDraw();
 		}
 		printf("game over!");
+		if(!mute)stopBGM();
 	}
 	return;
 }
