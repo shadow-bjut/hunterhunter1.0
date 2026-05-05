@@ -30,7 +30,7 @@ int   finalScore = 0;    // 最终得分（结算时计算）
 bool  gameWin = false;
 bool  gameLose = false;
 bool mute = false;
-
+bool noteverplay = true;
 
 // ============================================================
 // 背景音乐控制（基于 MCI，支持 MP3）
@@ -850,6 +850,7 @@ void initgame()//游戏初始化
 {
 	inithero();
 	initboss();
+	noteverplay = true;
 }
 
 void bossAI(hero* h)
@@ -1213,6 +1214,13 @@ void showWinScreen(hero* h)
 	settextcolor(RGB(200, 200, 200));
 	outtextxy(390, 480, _T("按 R 保存成绩并返回菜单"));
 	outtextxy(390, 515, _T("按 ESC 直接退出"));
+	if (noteverplay)
+	{
+		playBGM("gamewin.mp3");
+		Sleep(1000);
+		stopBGM();
+		noteverplay = false;
+	}
 }
 
 // ============================================
@@ -1238,8 +1246,15 @@ void showLoseScreen()
 
 	settextstyle(22, 0, _T("黑体"));
 	settextcolor(RGB(200, 200, 200));
-	outtextxy(390, 430, _T("按 R 重新开始"));
+	outtextxy(390, 430, _T("请长按 R 重新开始"));
 	outtextxy(390, 465, _T("按 ESC 退出"));
+	if (noteverplay)
+	{
+		playBGM("gamelose.mp3");
+		Sleep(4000);
+		stopBGM();
+		noteverplay = false;
+	}
 }
 
 void move(hero* h)
@@ -1418,7 +1433,7 @@ void itg() //inside the game
 				drawEffects();
 				drawHUD(ah);
 				if (checkGameOver(ah) != 0) {
-					// 游戏结束，停止更新逻辑
+					if (!mute)stopBGM();
 				}
 			}
 			// ---- 结算界面 ----
